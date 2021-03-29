@@ -45,7 +45,7 @@ void fromDeci(string &res, int base, int inputNum)
     strev(res);
 }
 
-int main()
+void getAndConvert()
 {
     int base;
     int num;
@@ -58,11 +58,22 @@ int main()
         cout << "Ingrese a que base quiere convertirlo: ";
         cin >> base;
 
-        string res;
+        if (base > 16 || base < 1)
+            cout << "Base entre 1 y 16 pa" << endl;
+        else
+        {
+            string res;
 
-        fromDeci(res, base, num);
+            fromDeci(res, base, num);
 
-        cout << "El numero en base " << base << " es " << res << endl;
-        cout << endl;
+            cout << "El numero en base " << base << " es " << res << endl;
+            cout << endl;
+        }
     }
+}
+
+int main()
+{
+    getAndConvert();
+    return 0;
 }
