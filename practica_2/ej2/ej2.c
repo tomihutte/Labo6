@@ -14,8 +14,7 @@
 #include <string.h>
 #include <ctype.h>
 
-int father_to_child[2], child_to_father[2];
-const char interr[13] = "Interrpution\n";
+int child_to_father[2];
 
 void catch_int_info(int sig_num, siginfo_t *psiginfo, void *pcontext)
 {
@@ -24,86 +23,55 @@ void catch_int_info(int sig_num, siginfo_t *psiginfo, void *pcontext)
            strsignal(sig_num), psiginfo->si_pid, psiginfo->si_code);
 }
 
-void father(int pid)
+void father()
 {
-    char send[128];
     char receive[128];
-    int rd1, rd2;
-
-    /*cierro los extremos de los pipes que no voy a usar*/
-    close(father_to_child[0]);
-    close(child_to_father[1]);
-
-    while (1)
-    {
-        /* leo de stdin */
-        rd1 = read(STDIN_FILENO, send, sizeof(send));
-        if (rd1 < 0)
-        {
-            /*uso break para que el programa continuo y 
-            cierre las cosas si pasa algo*/
-            perror("Read from stdin");
-            break;
-        }
-        /* exribo al pipe father->child */
-        if (write(father_to_child[1], send, rd1) < 0)
-        {
-            perror("Write father to child");
-            break;
-        }
-        /* leo del pipe child->father */
-        rd2 = read(child_to_father[0], receive, sizeof(receive));
-        if (rd2 < 0)
-        {
-            perror("Read father from child");
-            break;
-        }
-        /* escribo a stdout */
-        if (write(STDOUT_FILENO, receive, rd2) < 0)
-        {
-            perror("Write father to stdout");
-            break;
-        }
-    }
-    /* cierro los otros extremos del pipe 
-    cuando  hay un break */
-    close(father_to_child[1]);
-    close(child_to_father[0]);
-}
-
-void child()
-{
-    char receive[128], send[128];
     int rd;
 
-    /* cierro los extremos del pipe que no voy a usar */
-    close(father_to_child[1]);
-    close(child_to_father[0]);
-    while (1)
+    /*cierro los extremos de los pipes que no voy a usar*/
+    if (close(child_to_father[1]) < 0)
+        perror("Father close write pipe end:");
+
+    /* voy a leer del child hasta que no haya mas bytes para leer
+    o me de error */
+    while ((rd = read(child_to_father[0], receive, sizeof(receive))) > 0)
     {
-        /* leo del father->child */
-        if ((rd = read(father_to_child[0], receive, sizeof(receive))) == -1)
-        {
-            perror("Child receive from father");
-            /*uso break para que el programa continue y 
-            cierre las cosas si pasa algo*/
-            break;
-        }
-        /* convierto en mayuscula lo que lei */
-        for (int i = 0; i < strlen(receive); i++)
-        {
-            send[i] = toupper(receive[i]);
-        }
-        /* envio al father lo que converti en mayusculas */
-        if (write(child_to_father[1], send, rd) == -1)
-        {
-            perror("Child send to father");
-            break;
-        }
+        /* si hay un problema con la escritura */
+        if (write(STDOUT_FILENO, receive, rd) < 0)
+            perror("Father write to stdout:");
     }
-    /* cierro los otros extremos del pipe 
-    cuando  hay un break */
-    close(father_to_child[0]);
+    /* si el read me dio problemas (sali del while ya) */
+    if (rd < 0)
+        perror("Father read from child:");
+
+    /* cierro los otros extremos del pipe */
+    if (close(child_to_father[0]) < 0)
+        perror("Father close read pipe end:");
+}
+
+void child(int argc, char *argv[])
+{
+    /* voy a pasarle los argumentos del ejecutable */
+    char *argv_child[argc + 1];
+    /* el primero lo pongo como nombre del programa, para execv */
+    argv_child[0] = "ls";
+    for (int i = 1; i < argc; i++)
+        argv_child[i] = argv[i];
+    argv_child[argc] = NULL;
+
+    /* cierro los extremos del pipe que no voy a usar */
+    if (close(child_to_father[0]) < 0)
+        perror("Closing read pipe from child: ");
+
+    /* hago que el STOUT vaya al mismo file que child_to_father[1] */
+    if (dup2(child_to_father[1], STDOUT_FILENO) < 0)
+        perror("dup2 to stdout:");
+
+    /* como ls imprime en el stout, ahora lo va a mandar al child_to_father[1] */
+    if (execv("/usr/bin/ls", argv_child) < 0)
+        perror("Child excecv:");
+
+    /* cierro el extremo del pipe */
     close(child_to_father[1]);
 }
 
@@ -111,12 +79,6 @@ int main(int argc, char *argv[])
 {
     pid_t pid;
     struct sigaction act;
-
-    /* Inicializo  el sigaction para el child*/
-    act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = catch_int_info;
-    sigfillset(&act.sa_mask);
-    sigaction(SIGCHLD, &act, NULL);
 
     /* Inicializo  el sigaction para el pipe*/
     act.sa_flags = SA_SIGINFO;
@@ -131,33 +93,25 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &act, NULL);
 
     /* si hay un error con el pipe*/
-    if (pipe(father_to_child) == -1)
-    {
-        perror("Pipe father->child");
-        return 1;
-    }
     if (pipe(child_to_father) == -1)
     {
         perror("Pipe child->father");
-        return 1;
+        return -1;
     }
-    /* Imprimo el PID del padre*/
-    printf("[%s] Father pid is %d\n", argv[0], getpid());
     pid = fork();
     switch (pid)
     {
     case 0:
-        /* Imprimo el PID del hijo*/
-        printf("Child is %d\n", getpid());
-        child();
+        /* le paso los argumentos que vamos a usar */
+        child(argc, argv);
         break;
 
     case -1:
-        perror("error en el fork:");
+        perror("Fork error:");
         break;
 
     default:
-        father(pid);
+        father();
         break;
     }
 

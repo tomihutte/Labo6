@@ -15,7 +15,6 @@
 #include <ctype.h>
 
 int father_to_child[2], child_to_father[2];
-const char interr[13] = "Interrpution\n";
 
 void catch_int_info(int sig_num, siginfo_t *psiginfo, void *pcontext)
 {
@@ -77,7 +76,6 @@ void child()
     int rd;
 
     /* cierro los extremos del pipe que no voy a usar */
-    close(father_to_child[1]);
     close(child_to_father[0]);
     while (1)
     {
@@ -134,12 +132,12 @@ int main(int argc, char *argv[])
     if (pipe(father_to_child) == -1)
     {
         perror("Pipe father->child");
-        return 1;
+        return -1;
     }
     if (pipe(child_to_father) == -1)
     {
         perror("Pipe child->father");
-        return 1;
+        return -1;
     }
     /* Imprimo el PID del padre*/
     printf("[%s] Father pid is %d\n", argv[0], getpid());
