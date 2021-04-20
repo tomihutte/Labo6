@@ -11,11 +11,11 @@
 #include <string.h>
 
 #define n_signatures 2
-#define signature_len 6
-#define SH_BUF_SIZE 1024
+#define signature_len 7
+#define SH_BUF_SIZE 8
 
-const char signature_1[signature_len] = "child1";
-const char signature_2[signature_len] = "child2";
+const char signature_1[signature_len] = "AAAAAA";
+const char signature_2[signature_len] = "BBBBBB";
 int child1, child2;
 
 typedef struct
@@ -42,12 +42,11 @@ void unlockData(Data_t *pDat)
 
 void child(const char signature[], Data_t *pDat)
 {
-    int i, lb;
+    int i, lb = 0;
 
     while (1)
     {
         // lockData(pDat);
-        lb = strlen(pDat->buff);
         if (lb >= SH_BUF_SIZE - signature_len)
             break;
         for (i = 0; i < signature_len; i++)
@@ -68,11 +67,9 @@ void father(Data_t *pDat)
         for (i = pos; i < pos + signature_len; i++)
         {
             write(STDOUT_FILENO, &pDat->buff[i], sizeof(char));
-            // putchar(pDat->buff[i]);
         }
-        // putchar('\t');
+
         write(STDOUT_FILENO, &n, sizeof(char));
-        pos += signature_len;
 
         unlockData(pDat);
 
